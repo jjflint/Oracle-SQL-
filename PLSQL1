@@ -1,0 +1,26 @@
+/* Excersize 2.4   */
+
+set echo on
+spool d:hw3.txt
+
+set serveroutput on
+create or replace procedure buy (
+	p_buy number ) is
+
+v_pay number;	
+		 	
+begin 
+
+v_pay := p_buy - floor(p_buy/4);
+
+dbms_output.put_line('If you buy '|| p_buy ||' units '|| 'you will pay for '|| v_pay ||' units') ;
+
+end ;
+/
+
+exec buy (3);
+exec buy (4);
+exec buy (5);
+exec buy (6);
+exec buy (7);
+spool off
