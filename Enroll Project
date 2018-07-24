@@ -1,0 +1,609 @@
+set echo on
+set serveroutput on
+spool d:project.txt
+
+/* ---------------
+   Create table structure for Project
+   --------------- */
+
+drop table enrollments;
+drop table prereq;
+drop table waitlist;
+drop table schclasses;
+drop table courses;
+drop table students;
+drop table majors;
+
+-----
+-----
+
+
+create table MAJORS
+	(major varchar2(3) Primary key,
+	mdesc varchar2(30));
+insert into majors values ('ACC','Accounting');
+insert into majors values ('FIN','Finance');
+insert into majors values ('IS','Information Systems');
+insert into majors values ('MKT','Marketing');
+
+create table STUDENTS 
+	(snum varchar2(3) primary key,
+	sname varchar2(10),
+	standing number(1),
+	major varchar2(3) constraint fk_students_major references majors(major),
+	gpa number(2,1),
+	major_gpa number(2,1));
+
+insert into students values ('101','Andy',3,'IS',2.8,3.2);
+insert into students values ('102','Betty',2,null,3.2,null);
+insert into students values ('103','Cindy',3,'IS',2.5,3.5);
+insert into students values ('104','David',2,'FIN',3.3,3.0);
+insert into students values ('105','Ellen',1,null,2.8,null);
+insert into students values ('106','Frank',3,'MKT',3.1,2.9);
+
+create table COURSES
+	(dept varchar2(3) constraint fk_courses_dept references majors(major),
+	cnum varchar2(3),
+	ctitle varchar2(30),
+	crhr number(3),
+	standing number(1),
+	primary key (dept,cnum));
+
+insert into courses values ('IS','300','Intro to MIS',3,2);
+insert into courses values ('IS','301','Business Communicatons',3,2);
+insert into courses values ('IS','310','Statistics',3,2);
+insert into courses values ('IS','340','Programming',3,3);
+insert into courses values ('IS','380','Database',3,3);
+insert into courses values ('IS','385','Systems',3,3);
+insert into courses values ('IS','480','Adv Database',3,4);
+
+create table SCHCLASSES (
+	callnum number(5) primary key,
+	year number(4),
+	semester varchar2(3),
+	dept varchar2(3),
+	cnum varchar2(3),
+	section number(2),
+	capacity number(3));
+
+alter table schclasses 
+	add constraint fk_schclasses_dept_cnum foreign key 
+	(dept, cnum) references courses (dept,cnum);
+
+insert into schclasses values (10110,2014,'Fa','IS','300',1,45);
+insert into schclasses values (10115,2014,'Fa','IS','300',2,118);
+insert into schclasses values (10120,2014,'Fa','IS','300',3,35);
+insert into schclasses values (10125,2014,'Fa','IS','301',1,35);
+insert into schclasses values (10130,2014,'Fa','IS','301',2,35);
+insert into schclasses values (10135,2014,'Fa','IS','310',1,35);
+insert into schclasses values (10140,2014,'Fa','IS','310',2,35);
+insert into schclasses values (10145,2014,'Fa','IS','340',1,30);
+insert into schclasses values (10150,2014,'Fa','IS','380',1,33);
+insert into schclasses values (10155,2014,'Fa','IS','385',1,35);
+insert into schclasses values (10160,2014,'Fa','IS','480',1,35);
+
+create table PREREQ
+	(dept varchar2(3),
+	cnum varchar2(3),
+	pdept varchar2(3),
+	pcnum varchar2(3),
+	primary key (dept, cnum, pdept, pcnum));
+alter table Prereq 
+	add constraint fk_prereq_dept_cnum foreign key 
+	(dept, cnum) references courses (dept,cnum);
+alter table Prereq 
+	add constraint fk_prereq_pdept_pcnum foreign key 
+	(pdept, pcnum) references courses (dept,cnum);
+
+insert into prereq values ('IS','380','IS','300');
+insert into prereq values ('IS','380','IS','301');
+insert into prereq values ('IS','380','IS','310');
+insert into prereq values ('IS','385','IS','310');
+insert into prereq values ('IS','340','IS','300');
+insert into prereq values ('IS','480','IS','380');
+
+create table ENROLLMENTS (
+	snum varchar2(3) constraint fk_enrollments_snum references students(snum),
+	callnum number(5) constraint fk_enrollments_callnum references schclasses(callnum),
+	grade varchar2(2),
+	primary key (snum, callnum));
+
+insert into enrollments values (101,10110,'A');
+insert into enrollments values (102,10110,'B');
+insert into enrollments values (103,10120,'A');
+insert into enrollments values (101,10125,null);
+insert into enrollments values (102,10130,null);
+
+create table WAITLIST (
+	snum varchar2(3) constraint fk_waitlist_snum references students(snum),
+	callnum number(5) constraint fk_waitlist_callnum references schclasses(callnum),
+	Position number(2),
+	primary key (snum, callnum));
+
+commit;
+
+
+/* ---------------
+   Create Package for Project
+   --------------- */
+
+
+
+create or replace package Enroll as 
+
+procedure Validate_Student (
+	p_snum		IN      Students.snum%type,
+	p_ErrorMsg	OUT	varchar2);
+	
+	v_count number(3) ;
+
+procedure Validate_callnum (
+	p_callnum	IN      schclasses.callnum%type,
+	p_ErrorMsg	OUT	varchar2);
+	
+	v_count number(3) ;
+
+procedure Validate_Repeat (
+	p_snum		IN      enrollments.snum%type,
+	p_callnum	IN      enrollments.snum%type,
+	p_ErrorMsg	OUT	varchar2);
+	
+	v_count number(3) ;
+
+procedure Validate_Double (
+	p_snum		IN      enrollments.snum%type,
+	p_callnum	IN      enrollments.snum%type,
+	p_ErrorMsg	OUT	varchar2);
+	
+	v_count number(3) ;
+
+procedure Validate_standing (
+	p_snum		IN      Enrollments.snum%type,
+	p_callnum	IN	Enrollments.Callnum%type,
+	p_ErrorMsg	OUT	varchar2);
+	
+	v_student_standing number ;
+	v_class_standing number;
+
+procedure Validate_space (
+	p_callnum	IN	Enrollments.Callnum%type,
+	p_ErrorMsg	OUT	varchar2);
+	
+	v_capacity number ;
+	v_amount_enrolled number;
+	v_space number;	
+
+procedure Validate_credit (
+	p_snum		IN      Enrollments.snum%type,
+	p_callnum	IN 	Enrollments.Callnum%type,
+	p_ErrorMsg	OUT	varchar2) ;
+	
+	v_units_enrolled number ;
+	v_units_add number;
+	v_total_units number;
+
+Procedure Validate_enrolled (
+	p_snum		IN      Enrollments.snum%type,
+	p_callnum	IN 	Enrollments.Callnum%type,
+	p_ErrorMsg	OUT	varchar2) ;
+
+	v_check number ;
+
+Procedure Validate_Grade (
+	p_snum		IN      Enrollments.snum%type,
+	p_callnum	IN 	Enrollments.Callnum%type,
+	p_ErrorMsg	OUT	varchar2) ;
+
+	v_grade number ;
+
+procedure AddMe (
+	p_snum varchar2,
+	p_callnum number);
+	
+	v_spot number(2);
+	v_ErrorMsg varchar2 (200) ;
+	v_ErrorMsg_output varchar2 (200) ;
+
+procedure DropMe (
+	p_snum varchar2,
+	p_callnum number);
+	
+	v2_ErrorMsg varchar2 (200) ;
+	v2_ErrorMsg_output varchar2 (200) ;
+
+
+		
+
+End Enroll ;
+/
+
+--Body
+
+Create or Replace Package Body Enroll as
+
+procedure Validate_Student (
+	p_snum		IN      Students.snum%type,
+	p_ErrorMsg	OUT	varchar2) as
+	
+	v_count number(3) ;
+
+begin
+	--Is Snum Valid?
+	select count(*) into v_count
+	from students 
+	where snum = p_snum ;
+ 
+	IF v_count = 0 then
+	p_ErrorMsg := 'ERROR: Student Number '||p_snum||' Invalid. ';
+		
+	END IF;
+end ;
+
+
+procedure Validate_callnum (
+	p_callnum	IN      schclasses.callnum%type,
+	p_ErrorMsg	OUT	varchar2) as
+	
+	v_count number(3) ;
+
+begin
+	--Is callnum Valid?
+	select count(*) into v_count
+	from schclasses 
+	where callnum = p_callnum ;
+ 
+	IF v_count = 0 then
+	p_ErrorMsg := 'ERROR: Callnumber '||p_callnum||' Invalid. ';
+		
+	END IF;
+end ;
+
+procedure Validate_Repeat (
+	p_snum		IN      enrollments.snum%type,
+	p_callnum	IN      enrollments.snum%type,
+	p_ErrorMsg	OUT	varchar2) as
+	
+	v_count number(3) ;
+
+begin
+	--Is Snum Already enrolled?
+	select count(*) into v_count
+	from Enrollments 
+	where snum = p_snum
+	and callnum = p_callnum ;
+ 
+	IF v_count > 0 then
+	p_ErrorMsg := 'ERROR: Student Number '||p_snum||' Already Enrolled in '||p_callnum|| '! ';
+		
+	END IF;
+end ;
+
+procedure Validate_Double (
+	p_snum		IN      enrollments.snum%type,
+	p_callnum	IN      enrollments.snum%type,
+	p_ErrorMsg	OUT	varchar2) as
+	
+	v_count number(3) ;
+
+begin
+	--Is Snum Already enrolled in diffrent section?
+	select count(*) into v_count
+	from schclasses sc, schclasses sc1, enrollments e 
+	where sc.dept = sc1.dept
+	and sc.cnum = sc1.cnum 
+	and sc1.callnum = p_callnum
+	and e.snum = p_snum
+	and e.callnum = sc.callnum;
+ 
+	IF v_count > 0 then
+	p_ErrorMsg := 'ERROR: Student Number '||p_snum||' Already Enrolled in diffrent section! ';
+		
+	END IF;
+end ;
+
+procedure Validate_standing (
+	p_snum		IN      Enrollments.snum%type,
+	p_callnum	IN 	Enrollments.Callnum%type,
+	p_ErrorMsg	OUT	varchar2) as
+	
+	v_student_standing number ;
+	v_class_standing number;
+
+
+begin
+	--get class standing
+	select c.standing into v_class_standing
+	from courses c, schclasses sc 
+	where sc.callnum = p_callnum
+	and sc.dept = c.dept
+	and sc.cnum = c.cnum ;
+
+	--get student standing
+	select standing into v_student_standing
+	from students s 
+	where snum = p_snum ;
+	
+	IF v_class_standing > v_student_standing then
+	p_ErrorMsg := 'ERROR: Class standing requirment not met!' ;
+		
+	END IF;
+end ;
+
+procedure Validate_space (
+	p_callnum	IN	Enrollments.Callnum%type,
+	p_ErrorMsg	OUT	varchar2) as
+	
+	v_capacity number ;
+	v_amount_enrolled number;
+	v_space number;	
+begin
+	--Get Class capacity
+	select capacity into v_capacity
+	from schclasses 
+	where callnum = p_callnum ;
+	
+	--Get students enrolled number
+	select nvl(count(callnum),0) into v_amount_enrolled
+	from enrollments 
+	where callnum = p_callnum
+	and grade != 'w' ;	
+
+	v_space := v_capacity - v_amount_enrolled;
+	IF v_space = 0 then
+		p_ErrorMsg := 'The class with callnum '||p_callnum||' is full! ';
+		
+
+	END IF;
+end ;
+
+
+procedure Validate_credit (
+	p_snum		IN      Enrollments.snum%type,
+	p_callnum	IN 	Enrollments.Callnum%type,
+	p_ErrorMsg	OUT	varchar2) as
+	
+	v_units_enrolled number ;
+	v_units_add number;
+	v_total_units number;
+
+begin
+	--get units enrolled
+	select nvl(sum(crhr),0) into v_units_enrolled
+	from enrollments e, courses c, schclasses sc 
+	where e.snum = p_snum 
+	and e.callnum = sc.callnum
+	and sc.cnum = c.cnum ;
+
+	--Get units adding
+	select crhr into v_units_add 
+	from schclasses sc, courses c 
+	where callnum = p_callnum
+	and c.cnum = sc.cnum ;
+	
+	v_total_units := (v_units_enrolled + v_units_add); 
+	IF v_total_units > 15 then
+	p_ErrorMsg := 'ERROR: you currently have '||v_units_enrolled||' Units. By adding '||v_units_add||' units, you will exceed 15. ';
+		
+	END IF;
+end ;
+
+
+Procedure Validate_enrolled (
+	p_snum		IN      Enrollments.snum%type,
+	p_callnum	IN 	Enrollments.Callnum%type,
+	p_ErrorMsg	OUT	varchar2) as
+
+	v_check number ;
+
+begin 
+ 	--Is student enrolled?
+  	     
+	select count(callnum) into v_check
+	from enrollments
+	where snum = p_snum 
+	and callnum = p_callnum;
+	
+	if v_check = 0 then
+	p_ErrorMsg := 'ERROR: Cant Drop! Student not enrolled ';
+	END IF;
+end ;
+
+Procedure Validate_Grade (
+	p_snum		IN      Enrollments.snum%type,
+	p_callnum	IN 	Enrollments.Callnum%type,
+	p_ErrorMsg	OUT	varchar2) as
+
+	v_grade number ;
+
+begin 
+ 	--Is a grade assigned?
+  	     
+	select count(grade) into v_grade
+	from enrollments
+	where snum = p_snum 
+	and callnum = p_callnum;
+	
+	if v_grade > 0 then
+	p_ErrorMsg := 'ERROR: Cant Drop! Grade already assigned! ';
+	END IF;
+end ;
+
+
+procedure AddMe (
+	p_snum varchar2,
+	p_callnum number) as
+	
+	v_spot number(2);
+	v_ErrorMsg varchar2 (200) ;
+	v_error_output varchar2 (200) ;
+		
+begin
+
+--Check if Snum is valid
+
+	Validate_Student (
+		p_snum,
+		v_ErrorMsg);
+	v_ErrorMsg_output := v_ErrorMsg;
+	
+--check if callnum is valid
+
+	Validate_callnum (
+		p_callnum,
+		v_ErrorMsg);
+	v_ErrorMsg_output := v_ErrorMsg_output||v_ErrorMsg ;
+
+	IF v_ErrorMsg_output is null THEN
+
+ 	--Check if repeat enrollment
+		Validate_Repeat (
+			p_snum,
+			p_callnum,
+			v_ErrorMsg);
+		v_ErrorMsg_output := v_ErrorMsg_output||v_ErrorMsg ; 
+
+	--Check if Already enrolled in diffrent section
+		Validate_Double (
+			p_snum,
+			p_callnum,
+			v_ErrorMsg);
+		v_ErrorMsg_output := v_ErrorMsg_output||v_ErrorMsg ;
+
+	--Check standing
+		Validate_standing (
+			p_snum,
+			p_callnum,
+			v_ErrorMsg);
+		v_ErrorMsg_output := v_ErrorMsg_output||v_ErrorMsg ; 		
+
+	--Check if max units
+		Validate_credit(
+			p_snum,
+			p_callnum,
+			v_ErrorMsg);
+		v_ErrorMsg_output := v_ErrorMsg_output||v_ErrorMsg ;
+
+		IF v_ErrorMsg_output is null THEN
+		   --Check if class is full	
+			Validate_space(
+			    p_callnum,
+			    v_ErrorMsg);
+		         v_ErrorMsg_output := v_ErrorMsg_output||v_ErrorMsg ;
+		   
+		 	IF v_ErrorMsg_output is not null THEN
+		--Put on waitlist
+		   --Get waitlist position
+			select count(callnum) into v_spot
+			from waitlist
+			where callnum = p_callnum;
+			    insert into waitlist values (p_snum, p_callnum,v_spot);
+			    dbms_output.put_line ('Student ' ||p_snum||' is now on the waiting list for class '||p_callnum);
+				
+			END IF;
+		END IF;
+
+	--Everthing good? Enroll
+		IF v_ErrorMsg_output is null THEN
+			insert into enrollments values (p_snum, p_callnum,'');
+			dbms_output.put_line ('congrats! You are Enrolled!');
+		
+		ELSE
+			dbms_output.put_line (v_ErrorMsg_output);
+		END IF;
+	Else
+		dbms_output.put_line (v_ErrorMsg_output);
+	END IF;			
+end ;
+
+   procedure DropMe (
+	p_snum varchar2,
+	p_callnum number) as
+	
+	v_check_wait number(3);
+	v_nextsnum varchar2 (3);
+	v2_ErrorMsg varchar2 (200) ;
+	v2_ErrorMsg_output varchar2 (200) ;
+begin
+  	--Check if snum valid
+
+	Validate_Student (
+		p_snum,
+		v2_ErrorMsg);
+	v2_ErrorMsg_output := v2_ErrorMsg;
+
+        --check if callnum is valid
+
+	Validate_callnum (
+		p_callnum,
+		v2_ErrorMsg);
+	v2_ErrorMsg_output := v2_ErrorMsg_output||v2_ErrorMsg ;
+
+	IF v2_ErrorMsg_output is null THEN
+
+	--Is student enrolled?
+ 	   Validate_enrolled (
+		p_snum,
+		p_callnum,
+		v2_ErrorMsg) ;
+
+		v2_ErrorMsg_output := v2_ErrorMsg_output||v2_ErrorMsg ;
+
+	--Already Graded?
+		Validate_Grade (
+		p_snum,
+		p_callnum,
+		v2_ErrorMsg) ;
+		
+		v2_ErrorMsg_output := v2_ErrorMsg_output||v2_ErrorMsg ;
+
+	--Everthing good? Drop
+	    IF v2_ErrorMsg_output is null THEN
+		update enrollments
+		set grade = 'w'
+		where snum = p_snum
+		and callnum = p_callnum;
+		dbms_output.put_line ('congrats! You Dropped');
+	
+	       --Enroll from waitlist(is anyone on list?)
+
+		select count(*) into v_check_wait
+		from waitlist
+		where callnum = p_callnum;
+		
+		--Get next in line on wait list
+		If v_check_wait >= 1 Then
+
+		select snum into v_nextsnum
+		from ( select snum
+		from waitlist
+		where callnum = p_callnum
+		order by position)
+		where rownum <= 1;
+		
+
+		--add to class
+    		insert into enrollments values (v_nextsnum, p_callnum,''); 
+
+
+		--delete from waitlist
+    		delete from waitlist
+    		where snum = v_nextsnum
+    		and callnum = p_callnum;
+		End IF;
+		
+	
+
+	    ELSE
+		  dbms_output.put_line (v2_ErrorMsg_output);
+	    END IF;
+
+
+	Else 
+		dbms_output.put_line (v2_ErrorMsg_output);
+	End IF;
+end;
+
+End Enroll;
+/
+
+spool off
